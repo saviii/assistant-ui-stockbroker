@@ -147,3 +147,90 @@ export interface SnapshotResponse {
 }
 
 /* ---------------------------------------------------- */
+/**
+ * ----------------------------------------------------
+ * ------------- /financial-metrics/snapshot ------------
+ * ----------------------------------------------------
+ */
+export interface FinancialMetricsSnapshot {
+  ticker: string;
+  market_cap: number;
+  enterprise_value: number;
+  price_to_earnings_ratio: number;
+  price_to_book_ratio: number;
+  price_to_sales_ratio: number;
+  enterprise_value_to_ebitda_ratio: number;
+  enterprise_value_to_revenue_ratio: number;
+  free_cash_flow_yield: number;
+  peg_ratio: number;
+  gross_margin: number;
+  operating_margin: number;
+  net_margin: number;
+  return_on_equity: number;
+  return_on_assets: number;
+  return_on_invested_capital: number;
+  asset_turnover: number;
+  inventory_turnover: number;
+  receivables_turnover: number;
+  days_sales_outstanding: number;
+  operating_cycle: number;
+  working_capital_turnover: number;
+  current_ratio: number;
+  quick_ratio: number;
+  cash_ratio: number;
+  operating_cash_flow_ratio: number;
+  debt_to_equity: number;
+  debt_to_assets: number;
+  interest_coverage: number;
+  revenue_growth: number;
+  earnings_growth: number;
+  book_value_growth: number;
+  earnings_per_share_growth: number;
+  free_cash_flow_growth: number;
+  operating_income_growth: number;
+  ebitda_growth: number;
+  payout_ratio: number;
+  earnings_per_share: number;
+  book_value_per_share: number;
+  free_cash_flow_per_share: number;
+}
+
+export interface FinancialMetricsSnapshotResponse {
+  snapshot: FinancialMetricsSnapshot;
+}
+
+/* ---------------------------------------------------- */
+/**
+ * ----------------------------------------------------
+ * --------------- /financials/search -----------------
+ * ----------------------------------------------------
+ */
+
+export interface FinancialsSearchFilter {
+  field: string; // e.g., "revenue", "total_debt", "capital_expenditure"
+  operator: "eq" | "gt" | "gte" | "lt" | "lte";
+  value: number;
+}
+
+export interface FinancialsSearchRequestBody {
+  filters: FinancialsSearchFilter[];
+  period?: "annual" | "quarterly" | "ttm";
+  limit?: number;
+  order_by?: string; // e.g., "ticker", "-ticker", "report_period", "-report_period"
+  currency?: "USD" | "EUR" | "GBP" | "JPY" | "CHF" | "AUD" | "CAD" | "SEK";
+  historical?: boolean;
+}
+
+// Using a flexible structure for search results as fields can vary
+export interface FinancialsSearchResult extends Record<string, string | number | undefined> {
+  ticker: string;
+  report_period: string;
+  period: "annual" | "quarterly" | "ttm";
+  // Other fields like 'revenue', 'capital_expenditure' will be present based on query context
+}
+
+export interface FinancialsSearchResponse {
+  search_results: FinancialsSearchResult[];
+}
+
+/* ---------------------------------------------------- */

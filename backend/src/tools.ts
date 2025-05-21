@@ -6,6 +6,9 @@ import {
   CashFlowStatementsResponse,
   CompanyFactsResponse,
   SnapshotResponse,
+  FinancialMetricsSnapshotResponse,
+  FinancialsSearchRequestBody,
+  FinancialsSearchResponse,
 } from "types.js";
 import { z } from "zod";
 
@@ -13,20 +16,30 @@ export async function callFinancialDatasetAPI<
   Output extends Record<string, any> = Record<string, any>
 >(fields: {
   endpoint: string;
-  params: Record<string, string>;
+  params?: Record<string, string>;
+  method?: "GET" | "POST";
+  body?: Record<string, any>;
 }): Promise<Output> {
   if (!process.env.FINANCIAL_DATASETS_API_KEY) {
     throw new Error("FINANCIAL_DATASETS_API_KEY is not set");
   }
 
   const baseURL = "https://api.financialdatasets.ai";
-  const queryParams = new URLSearchParams(fields.params).toString();
-  const url = `${baseURL}${fields.endpoint}?${queryParams}`;
+  const queryParams = fields.params ? new URLSearchParams(fields.params).toString() : "";
+  const url = `${baseURL}${fields.endpoint}${queryParams ? `?${queryParams}` : ""}`;
+  
+  const requestMethod = fields.method || "GET";
+  const headers: Record<string, string> = {
+    "X-API-KEY": process.env.FINANCIAL_DATASETS_API_KEY,
+  };
+  if (requestMethod === "POST") {
+    headers["Content-Type"] = "application/json";
+  }
+
   const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "X-API-KEY": process.env.FINANCIAL_DATASETS_API_KEY,
-    },
+    method: requestMethod,
+    headers,
+    body: fields.body ? JSON.stringify(fields.body) : undefined,
   });
 
   if (!response.ok) {
@@ -41,7 +54,7 @@ export async function callFinancialDatasetAPI<
       }
     }
     throw new Error(
-      `Failed to fetch data from ${fields.endpoint}.\nResponse: ${res}`
+      `Failed to fetch data from ${fields.endpoint}.\nStatus: ${response.status}\nResponse: ${res}`
     );
   }
   const data = await response.json();
@@ -279,6 +292,64 @@ export const webSearchTool = new TavilySearchResults({
   maxResults: 2,
 });
 
+const financialMetricsSnapshotTool = tool(
+  async (input) => {
+    try {
+      const data = await callFinancialDatasetAPI<FinancialMetricsSnapshotResponse>({
+        endpoint: "/financial-metrics/snapshot",
+        params: {
+          ticker: input.ticker,
+        },
+      });
+      return JSON.stringify(data, null);
+    } catch (e: any) {
+      console.warn("Error fetching financial metrics snapshot", e.message);
+      return `An error occurred while fetching financial metrics snapshot: ${e.message}`;
+    }
+  },
+  {
+    name: "financial_metrics_snapshot",
+    description:
+      "Retrieves a snapshot of current financial metrics for a given company. This includes ratios like P/E, P/B, P/S, various growth rates (revenue, earnings), margins, and other key financial indicators. Requires a company ticker.",
+    schema: z.object({
+      ticker: z.string().describe("The ticker of the company. Example: 'AAPL'"),
+    }),
+  }
+);
+
+const financialsSearchTool = tool(
+  async (input: FinancialsSearchRequestBody) => {
+    try {
+      const data = await callFinancialDatasetAPI<FinancialsSearchResponse>({
+        endpoint: "/financials/search",
+        method: "POST",
+        body: input,
+      });
+      return JSON.stringify(data, null);
+    } catch (e: any) {
+      console.warn("Error during financial search", e.message);
+      return `An error occurred during financial search: ${e.message}`;
+    }
+  },
+  {
+    name: "financials_search",
+    description:
+      "Searches for companies based on a set of financial statement filters (e.g., revenue, total_debt, capital_expenditure). Allows filtering by metrics from income statements, balance sheets, and cash flow statements. For example, to find companies with revenue greater than $100 million and total debt less than $1, use appropriate filters. Refer to API documentation for available filter fields and operators.",
+    schema: z.object({
+      filters: z.array(z.object({
+        field: z.string().describe("The financial metric field to filter on. E.g., 'revenue', 'net_income'."),
+        operator: z.enum(["eq", "gt", "gte", "lt", "lte"]).describe("The comparison operator."),
+        value: z.number().describe("The value to compare against."),
+      })).describe("An array of filter objects."),
+      period: z.enum(["annual", "quarterly", "ttm"]).optional().default("ttm").describe("Time period for financial data."),
+      limit: z.number().int().min(1).max(100).optional().default(100).describe("Maximum number of results."),
+      order_by: z.string().optional().describe("Field to order results by (e.g., 'ticker', '-revenue')."),
+      currency: z.enum(["USD", "EUR", "GBP", "JPY", "CHF", "AUD", "CAD", "SEK"]).optional().describe("Currency for financial data."),
+      historical: z.boolean().optional().default(false).describe("Whether to return historical data."),
+    }),
+  }
+);
+
 export const ALL_TOOLS_LIST = [
   incomeStatementsTool,
   balanceSheetsTool,
@@ -286,6 +357,8 @@ export const ALL_TOOLS_LIST = [
   companyFactsTool,
   priceSnapshotTool,
   purchaseStockTool,
+  financialMetricsSnapshotTool,
+  financialsSearchTool,
   webSearchTool,
 ];
 
@@ -295,5 +368,7 @@ export const SIMPLE_TOOLS_LIST = [
   cashFlowStatementsTool,
   companyFactsTool,
   priceSnapshotTool,
+  financialMetricsSnapshotTool,
+  financialsSearchTool,
   webSearchTool,
 ];
