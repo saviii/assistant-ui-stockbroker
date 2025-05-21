@@ -4,7 +4,16 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["**/dist/**"]
+      "outputs": ["**/dist/**", ".next/**", "!.next/cache/**"],
+      "env": [
+        "FINANCIAL_DATASETS_API_KEY",
+        "OPENAI_API_KEY", 
+        "LANGGRAPH_API_URL",
+        "LANGCHAIN_API_KEY",
+        "LANGCHAIN_TRACING_V2",
+        "LANGCHAIN_CALLBACKS_BACKGROUND",
+        "TAVILY_API_KEY"
+      ]
     },
     "lint": {
       "dependsOn": ["^lint"]

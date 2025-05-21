@@ -74,3 +74,23 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  .aui-composer-root {
+    border-radius: 30px !important;
+    padding: 0.75rem !important; /* p-3 equivalent */
+  }
+
+  .aui-composer-input {
+    min-height: 58px !important;
+    height: 58px !important; /* Ensure height is explicitly set */
+    /* The following are to ensure the text is vertically centered if the placeholder is short */
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  /* Adjust placeholder alignment if needed */
+  .aui-composer-input::placeholder {
+    line-height: normal !important; /* Or adjust to a specific value if centering is off */
+  }
+}

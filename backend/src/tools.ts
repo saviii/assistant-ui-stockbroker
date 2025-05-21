@@ -350,6 +350,94 @@ const financialsSearchTool = tool(
   }
 );
 
+// Schema for SEC Filings tool input (mirrors frontend SecFilingsInputSchema)
+const BaseSecFilingsInputSchema = z.object({
+  ticker: z.string().optional().describe("The ticker symbol of the company (e.g., AAPL)."),
+  cik: z.string().optional().describe("The Central Index Key (CIK) of the company."),
+  filing_type: z.enum(["10-K", "10-Q", "8-K", "4", "144"]).optional().describe("The type of filing."),
+});
+
+const SecFilingsInputSchema = BaseSecFilingsInputSchema.refine(data => data.ticker || data.cik, {
+  message: "Either 'ticker' or 'cik' must be provided.",
+});
+
+// Define interfaces for the expected response structure from callFinancialDatasetAPI for these new tools
+// Based on your frontend sec-filings.tsx and the API docs
+interface Filing {
+  accessionNo: string;
+  cik: string;
+  ticker?: string | null;
+  company?: string | null;
+  companyNameLong?: string | null;
+  formType: string;
+  description?: string | null;
+  filedAt: string;
+  linkToTxt: string;
+  linkToHtm: string;
+  linkToXbrl?: string | null;
+  linkToFilingDetails: string;
+}
+
+interface SecFilingsApiResponse {
+  filings: Filing[];
+  // The actual API might return other fields, but we primarily care about filings
+}
+
+interface AvailableTickersApiResponse {
+  tickers: string[];
+}
+
+export const secFilingsTool = tool(
+  async (input: z.infer<typeof SecFilingsInputSchema>) => {
+    // Runtime check, Zod parsing with .refine() would ideally catch this before tool execution by Langchain/Langgraph
+    if (!input.ticker && !input.cik) { 
+      return "Error: Either ticker or CIK must be provided to sec_filings tool.";
+    }
+    try {
+      const params: Record<string, string> = {};
+      if (input.ticker) params.ticker = input.ticker;
+      if (input.cik) params.cik = input.cik;
+      if (input.filing_type) params.filing_type = input.filing_type;
+
+      const data = await callFinancialDatasetAPI<SecFilingsApiResponse>({
+        endpoint: "/filings",
+        params: params,
+      });
+      return JSON.stringify(data.filings || [], null, 2);
+    } catch (e: any) {
+      console.warn("Error fetching SEC filings:", e.message);
+      return `An error occurred while fetching SEC filings: ${e.message}`;
+    }
+  },
+  {
+    name: "sec_filings",
+    description:
+      "Fetches SEC (Securities and Exchange Commission) filings for a given company stock ticker or CIK. Use this to find documents like 10-K annual reports, 10-Q quarterly reports, 8-K current reports, etc. You must provide either a ticker or a CIK. Optionally, you can specify a filing_type (e.g., \"10-K\", \"10-Q\").",
+    schema: BaseSecFilingsInputSchema, // Use the base schema here
+  }
+);
+
+export const getAvailableTickersTool = tool(
+  async () => {
+    try {
+      const data = await callFinancialDatasetAPI<AvailableTickersApiResponse>({
+        endpoint: "/filings/tickers/", // Ensure trailing slash if API expects it
+      });
+      return JSON.stringify(data.tickers || [], null, 2); // Return tickers array
+    } catch (e: any) {
+      console.warn("Error fetching available tickers:", e.message);
+      return `An error occurred while fetching available tickers: ${e.message}`;
+    }
+  },
+  {
+    name: "get_available_tickers",
+    description:
+      "Fetches a list of all available stock tickers for which SEC filings and other financial data can be retrieved.",
+    // This tool takes no input arguments, so schema can be a Zod object with no fields, or omitted if framework allows
+    schema: z.object({}), 
+  }
+);
+
 export const ALL_TOOLS_LIST = [
   incomeStatementsTool,
   balanceSheetsTool,
@@ -360,6 +448,8 @@ export const ALL_TOOLS_LIST = [
   financialMetricsSnapshotTool,
   financialsSearchTool,
   webSearchTool,
+  secFilingsTool,
+  getAvailableTickersTool,
 ];
 
 export const SIMPLE_TOOLS_LIST = [
@@ -371,4 +461,6 @@ export const SIMPLE_TOOLS_LIST = [
   financialMetricsSnapshotTool,
   financialsSearchTool,
   webSearchTool,
+  secFilingsTool,
+  getAvailableTickersTool,
 ];
