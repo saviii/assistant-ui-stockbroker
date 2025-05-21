@@ -39,11 +39,35 @@ const callModel = async (state: typeof GraphAnnotation.State) => {
   const systemMessage = {
     role: "system",
     content:
-      "You're an expert financial analyst, tasked with answering the users questions " +
-      "about a given company or companies. You do not have up to date information on " +
-      "the companies, so you much call tools when answering users questions. " +
-      "All financial data tools require a company ticker to be passed in as a parameter. If you " +
-      "do not know the ticker, you should use the web search tool to find it.",
+      "You are an expert financial analyst. Your primary goal is to answer user questions about companies and financial markets. " +
+      "You have several tools at your disposal. Prioritize using the most specific tool for the task. Break down complex queries into multiple steps if necessary." +
+
+      "Tool Guide:\n" +
+      "1. `financialsSearchTool`: Your **primary tool** for finding companies based on financial criteria (e.g., revenue > $1B, net_income > $100M). Use its `filters` for direct criteria. \n" +
+      "   - For criteria not directly filterable by this tool (like specific growth rates or sorting by metrics from other tools like P/E ratio), you may need a multi-step process:\n" +
+      "     a. Use `financialsSearchTool` for the initial screen with available filters (e.g., revenue).\n" +
+      "     b. For each company found, you might then need to use `financialMetricsSnapshotTool` to get additional metrics (like P/E ratio for sorting) or data to calculate growth.\n" +
+      "     c. To calculate growth rates (e.g., revenue growth), you might need to fetch financial data for the current and a previous period (e.g., using `financialsSearchTool` with different `period` settings or by fetching historical income statements using `incomeStatementsTool`), then perform the calculation.\n" +
+      "   - Example: For 'companies with >$10B revenue, 10% revenue growth, sorted by P/E': \n" +
+      "     Step 1: Use `financialsSearchTool` to find companies with revenue > $10B (TTM).\n" +
+      "     Step 2: For each, get previous year\'s TTM revenue (e.g. another `financialsSearchTool` call or `incomeStatementsTool`). Calculate growth.\n" +
+      "     Step 3: For those meeting growth criteria, use `financialMetricsSnapshotTool` to get their P/E ratios.\n" +
+      "     Step 4: Present the list sorted by P/E ratio.\n" +
+
+      "2. `financialMetricsSnapshotTool`: Use this to get a snapshot of many key financial metrics (including P/E ratio, margins, yields) for a *specific* company ticker. Essential for detailed current data on one company or for enriching results from `financialsSearchTool`.\n" +
+
+      "3. `incomeStatementsTool`, `balanceSheetsTool`, `cashFlowStatementsTool`: Use these for detailed *historical* financial statement data for a *specific* company ticker (annual or quarterly).\n" +
+
+      "4. `companyFactsTool`: For general, non-financial facts about a *specific* company (e.g., industry, CEO).\n" +
+
+      "5. `priceSnapshotTool`: To get the *current stock price* for a *specific* company ticker.\n" +
+
+      "6. `webSearchTool` (Tavily): Use this as a **last resort** if specialized financial tools cannot provide the answer. Useful for finding ticker symbols from company names, or for very general news/market queries not tied to specific company financials.\n" +
+
+      "General Guidelines:\n" +
+      "- Always state which tool(s) you are using and why, especially for multi-step queries.\n" +
+      "- You do not have live, up-to-the-second data unless you call a tool.\n" +
+      "- If a user query requires multiple criteria that span different tools or require calculations, explain your plan to retrieve and process the information step-by-step."
   };
 
   const llmWithTools = llm.bindTools(ALL_TOOLS_LIST);
@@ -155,114 +179,4 @@ const preparePurchaseDetails = async (state: typeof GraphAnnotation.State) => {
       };
     } else {
       // The user did not provide the ticker, but did provide the company name.
-      // Call the `findCompanyName` tool to get the ticker.
-      ticker = await findCompanyName(purchaseStockTool.args.companyName);
-    }
-  }
-
-  if (!maxPurchasePrice) {
-    // If `maxPurchasePrice` is not defined, default to the current price.
-    const priceSnapshot = await priceSnapshotTool.invoke({ ticker });
-    maxPurchasePrice = priceSnapshot.snapshot.price;
-  }
-
-  // Now we have the final ticker, we can return the purchase information.
-  return {
-    requestedStockPurchaseDetails: {
-      ticker,
-      quantity: purchaseStockTool.args.quantity ?? 1, // Default to one if not provided.
-      maxPurchasePrice,
-    },
-  };
-};
-
-const purchaseApproval = async (state: typeof GraphAnnotation.State) => {
-  const { messages } = state;
-  const lastMessage = messages[messages.length - 1];
-  if (!(lastMessage instanceof ToolMessage)) {
-    // Interrupt the node to request permission to execute the purchase.
-    throw new NodeInterrupt("Please confirm the purchase before executing.");
-  }
-};
-
-const shouldExecute = (state: typeof GraphAnnotation.State) => {
-  const { messages } = state;
-  const lastMessage = messages[messages.length - 1];
-  if (!(lastMessage instanceof ToolMessage)) {
-    // Interrupt the node to request permission to execute the purchase.
-    throw new NodeInterrupt("Please confirm the purchase before executing.");
-  }
-
-  const { approve } = JSON.parse(lastMessage.content as string);
-  return approve ? "execute_purchase" : "agent";
-};
-
-const executePurchase = async (state: typeof GraphAnnotation.State) => {
-  const { requestedStockPurchaseDetails } = state;
-  if (!requestedStockPurchaseDetails) {
-    throw new Error("Expected requestedStockPurchaseDetails to be present");
-  }
-
-  // Execute the purchase. In this demo we'll just return a success message.
-  const { ticker, quantity, maxPurchasePrice } = requestedStockPurchaseDetails;
-
-  const toolCallId = "tool_" + Math.random().toString(36).substring(2);
-  return {
-    messages: [
-      {
-        type: "ai",
-        tool_calls: [
-          {
-            name: "execute_purchase",
-            id: toolCallId,
-            args: {
-              ticker,
-              quantity,
-              maxPurchasePrice,
-            },
-          },
-        ],
-      },
-      {
-        type: "tool",
-        name: "execute_purchase",
-        tool_call_id: toolCallId,
-        content: JSON.stringify({
-          success: true,
-        }),
-      },
-      {
-        type: "ai",
-        content:
-          `Successfully purchased ${quantity} share(s) of ` +
-          `${ticker} at $${maxPurchasePrice}/share.`,
-      },
-    ],
-  };
-};
-
-const workflow = new StateGraph(GraphAnnotation)
-  .addNode("agent", callModel)
-  .addEdge(START, "agent")
-  .addNode("tools", toolNode)
-  .addNode("prepare_purchase_details", preparePurchaseDetails)
-  .addNode("purchase_approval", purchaseApproval)
-  .addNode("execute_purchase", executePurchase)
-  .addEdge("prepare_purchase_details", "purchase_approval")
-  .addEdge("execute_purchase", END)
-  .addEdge("tools", "agent")
-  .addConditionalEdges("purchase_approval", shouldExecute, [
-    "agent",
-    "execute_purchase",
-  ])
-  .addConditionalEdges("agent", shouldContinue, [
-    "tools",
-    END,
-    "prepare_purchase_details",
-  ]);
-
-export const graph = workflow.compile({
-  // The LangGraph Studio/Cloud API will automatically add a checkpointer
-  // only uncomment if running locally
-  // checkpointer: new MemorySaver(),
-});
+      // Call the `
