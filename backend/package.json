@@ -1,0 +1,29 @@
+{
+  "name": "financial-expert",
+  "description": "Financial expert LangGraph.js example",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --project tsconfig.json --outDir dist",
+    "start": "npx @langchain/langgraph-cli up",
+    "format": "prettier --write \"**/*.ts\"",
+    "format:check": "prettier --check \"**/*.ts\""
+  },
+  "author": "Brace Sproul",
+  "license": "MIT",
+  "dependencies": {
+    "@langchain/community": "^0.3.24",
+    "@langchain/core": "^0.3.29",
+    "@langchain/langgraph": "^0.2.39",
+    "@langchain/openai": "^0.3.17",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@langchain/langgraph-cli": "^0.0.37",
+    "@tsconfig/recommended": "^1.0.8",
+    "dotenv": "^16.4.7",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
